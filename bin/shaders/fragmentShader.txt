@@ -1,0 +1,53 @@
+#version 400 core
+
+in vec2 pass_textureCoords;
+in vec3 surfaceNormal;
+in vec3 toLightVector[4];
+in vec3 toCameraVector;
+in float visibility;
+
+out vec4 outColor;
+
+uniform sampler2D textureSampler; 
+uniform vec3 lightColor[4];
+uniform vec3 attenuation[4];
+uniform float shineDamper;
+uniform float reflectivity;
+uniform vec3 skyColor;
+
+void main(void){
+	vec3 unitNormal = normalize(surfaceNormal);
+	vec3 unitVectorToCamera = normalize(toCameraVector);
+	
+	vec3 totalDiffuse = vec3(0.0);
+	vec3 totalSpecular = vec3(0.0);
+	for(int i =0;i<4;i++){
+		//distance to light source
+		float distance = length(toLightVector[i]);
+		//att + att * dist + att * dist^2
+		float attFactor = attenuation[i].x + (attenuation[i].y * distance) +
+		(attenuation[i].z * distance * distance);
+		
+		vec3 unitLightVector = normalize(toLightVector[i]);	
+		float nDotProduct = dot(unitNormal, unitLightVector);
+		float brightness = max(nDotProduct,0.0);
+		vec3 lightDirection = -unitLightVector;
+		vec3 reflectedLightDirection = reflect(lightDirection, unitNormal);
+		//reflection
+		float specularFactor = dot(reflectedLightDirection,unitVectorToCamera);
+		specularFactor = max(specularFactor, 0.0);
+		float dampedFactor = pow(specularFactor, shineDamper);
+		totalDiffuse += (brightness * lightColor[i]) / attFactor;
+		totalSpecular += (dampedFactor * reflectivity * lightColor[i]) /attFactor;
+	}
+	totalDiffuse = max(totalDiffuse,0.2);
+	
+	//delete transparent part of the model
+	vec4 textureColor = texture(textureSampler,pass_textureCoords);
+	if(textureColor.a < 0.5){
+	discard;
+	}
+	//color of pixel on the coordinates
+	outColor = vec4(totalDiffuse,1.0f) *  textureColor + vec4(totalSpecular,1.0f);
+	outColor = mix(vec4(skyColor, 1.0),outColor,visibility);
+}
